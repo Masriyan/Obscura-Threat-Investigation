@@ -208,6 +208,36 @@ Stage 5:  ClickFix overlay + clipboard hijack
 
 Stage 2 uses a hidden iframe injected into the DOM — the literal HTML string `<iframe src="about:blank" style="display:none"></iframe>` was sitting in the decoded array I pulled earlier. The iframe fires a `postMessage` to the TDS after the play button is clicked, with a 22-second delay (`setTimeout(sendAclck, 22000)`) to appear organic.
 
+### iframeId Algorithm — Cracked
+
+The `id` parameter passed to `/ip129jk` (`34676235356a39337a747969`) looks random. It isn't. It's deterministically derived from the video ID:
+
+```
+iframeId = hex_encode( reverse(videoId) )
+
+videoId  = "iytz39j55bg4"
+reversed = "4gb55j93ztyi"
+hex      = "34676235356a39337a747969"  ✓
+```
+
+This means for **any** video on `vid30s.com`, the TDS iframe endpoint can be computed without touching the frontend. The scheme provides a lightweight server-side consistency check (anti-CSRF) but offers zero security — the algorithm is trivially reversible.
+
+### XGI= — The Hidden Regex Anchor
+
+The decoded string array also contained the value `XGI=` positioned between `atob` and `RegExp`. Decoding it:
+
+```javascript
+atob('XGI=')  // → '\b'  (bytes: 0x5c 0x62)
+```
+
+`\b` is a RegExp word-boundary anchor. Its position in the array reveals a hidden runtime construction:
+
+```javascript
+new RegExp(atob('XGI='), 'g')  // → /\b/g
+```
+
+This allows the script to split or match on word boundaries without the literal `\b` ever appearing in source — a technique to defeat static string-signature WAF rules.
+
 ### The Smoking Gun — CORS Header
 
 This was the most forensically significant finding:
@@ -337,7 +367,106 @@ All of these families target the same things: browser saved passwords, session c
 
 ---
 
-## 11. MITRE ATT&CK Mapping
+## 11. Infrastructure Attribution — CNAME Fleet & Servers.com Singapore
+
+Up to this point the origin server was dark behind Cloudflare. Pivoting the DNS chain forward exposed the real hosting layer.
+
+### CNAME Indirection Layer
+
+```bash
+$ dig +short CNAME tu.pinderecphory.com
+aerionvel.com.
+
+$ dig +short CNAME lr.dicconbumtrap.com
+aerithvel.com.
+```
+
+Both TDS payload hosts (`tu.pinderecphory.com` and `lr.dicconbumtrap.com`) are CNAME aliases pointing to a pair of "parking" domains. Both parking domains were created on the **same day**:
+
+```bash
+$ whois aerionvel.com | grep 'Creation Date'
+Creation Date: 2026-05-28T14:09:18Z   # 3 days before this investigation
+
+$ whois aerithvel.com | grep 'Creation Date'
+Creation Date: 2026-05-28T14:07:51Z   # same day, same registrar
+```
+
+Both registered via **Amazon Registrar** — exploiting AWS's stronger abuse-handling reputation to delay takedown. The naming pattern (`aer[ION]vel`, `aer[ITH]vel`) suggests automated fleet generation. Searching `aer.{2,6}vel\.com` on Censys/FOFA should surface additional fleet members.
+
+### Origin IP Attribution — Servers.com Singapore (SIN2)
+
+Resolving the CNAME targets reveals a rotating pool of 20+ IPs, all belonging to three adjacent CIDR blocks:
+
+```
+$ whois -h whois.ripe.net 172.241.7.1
+  inetnum: 172.241.6.0 - 172.241.7.255
+  netname: SERVERS-COM-SIN2
+  country: SG
+  mnt-by:  SERVERS-MNT
+
+$ whois -h whois.ripe.net 23.109.135.1
+  inetnum: 23.109.134.0 - 23.109.135.255
+  netname: SERVERS-COM-SIN2
+  country: SG
+
+$ whois 69.41.166.1
+  CIDR:    69.41.166.0/23
+  NetName: SERVERS-COM-SIN2
+  OrgName: Servers.com, Inc.
+```
+
+| IP Block | Provider | Location | IPs |
+|----------|----------|----------|-----|
+| 69.41.166.0/23 | Servers.com, Inc. | Singapore (SIN2) | ~512 |
+| 172.241.6.0/22 | Servers.com, Inc. | Singapore (SIN2) | ~1024 |
+| 23.109.134.0/22 | Servers.com, Inc. | Singapore (SIN2) | ~1024 |
+
+**The entire CDN/TDS payload infrastructure — `aerionvel.com`, `aerithvel.com`, `renamereptiliantrance.com` — runs on a single physical datacenter: Servers.com SIN2 in Singapore.**
+
+Zero PTR records on any of these IPs. Null reverse DNS is deliberate OPSEC to prevent passive hostname enumeration.
+
+### Supporting Infrastructure Map
+
+```
+js.wpadmngr.com  →  cdn28786515.ahacdn.me  →  213.174.146.94-95 (Russia/RIPE)
+   (Registrar: NameCheap / NS: DigitalOcean)
+   Note: ahacdn.me is a CDN provider known to be abused for malware script hosting.
+
+adsco.re         →  162.252.214.5
+   (OrgName: Total Uptime Technologies, LLC — US)
+   Role: Ad-network routing for affiliate traffic monetization.
+
+acscdn.com       →  Cloudflare (104.18.16-17.201)
+   (Registrar: GoDaddy, created 2020-05-05, repurposed)
+```
+
+### Operation Timeline — Reconstructed
+
+Cross-referencing all WHOIS creation dates reveals an operator that has been building this network for years, with an active expansion wave hitting just before this investigation:
+
+```
+2012  vidoy.com            — old domain, later repurposed as bait
+2019  bvtpk.com            — TDS ad-router
+2020  acscdn.com           — CDN support layer
+2021  wpadmngr.com         — WordPress malware admin injector
+2022  dd133.com            — TDS router
+2022  jnbhi.com            — TDS ad-router
+2025  renamereptiliantrance.com  — TDS/payload (Amazon Registrar)
+2025  pinderecphory.com    — ClickFix payload host (Pananames/URL Solutions)
+2026  vidara.to            — new bait platform
+2026  dicconbumtrap.com    — TDS routing host (Pananames)
+2026-05-28  aerionvel.com  — CNAME fleet deployment  ← NEW
+2026-05-28  aerithvel.com  — CNAME fleet deployment  ← NEW
+2026-05-30  vid30s.com     — bait platform (2 days old at investigation)  ← NEW
+```
+
+The 2026-05-28 burst is the freshest indicator of active infrastructure rotation. The threat actor is not dormant — they are actively expanding.
+
+> *"When multiple freshly-created domains share a creation date and registrar, you're looking at automated fleet provisioning, not manual domain purchases."*
+
+---
+
+## 12. MITRE ATT&CK Mapping
 
 ```
 T1189     Drive-by Compromise
@@ -372,35 +501,43 @@ T1539 / T1552  Steal Web Session Cookie / Unsecured Credentials
 
 ---
 
-## 12. IOC Master List — Block These Now
+## 13. IOC Master List — Block These Now
 
-| Type | Indicator |
-|------|-----------|
-| Domain (bait) | `vid30s.com` |
-| Domain (bait) | `vidara.to` |
-| Domain (bait) | `vidoy.com` |
-| Domain (TDS) | `dd133.com` |
-| Domain (TDS) | `js.wpadmngr.com` |
-| Domain (TDS) | `jnbhi.com` |
-| Domain (TDS) | `bvtpk.com` |
-| Domain (TDS) | `renamereptiliantrance.com` |
-| Domain (TDS) | `lr.dicconbumtrap.com` |
-| Domain (TDS) | `adsco.re` |
-| Domain (TDS) | `acscdn.com` |
-| Domain (injector) | `tu.pinderecphory.com` |
-| IP (origin, exposed) | `69.41.166.29` |
-| IP (CF proxy) | `104.21.4.212` |
-| IP (CF proxy) | `172.67.132.128` |
-| IP (CF proxy) | `172.67.68.241` |
-| GA ID | `G-RRBBHD087X` |
-| Affiliate ID | `m2v063z8` |
-| Campaign ID | `121024` |
-| Cookie | `GL_UI4` (Base64/Zlib victim fingerprint) |
-| Cookie | `GL_GI10` (Base64/Zlib compromise status) |
+| Type | Indicator | Notes |
+|------|-----------|-------|
+| Domain (bait) | `vid30s.com` | Created 2026-05-30, NameCheap/Cloudflare |
+| Domain (bait) | `vidara.to` | Created 2026-02-04, NameCheap/Cloudflare |
+| Domain (bait) | `vidoy.com` | Old domain, Bunny.net CDN |
+| Domain (TDS) | `dd133.com` | NameCheap/Cloudflare |
+| Domain (TDS) | `js.wpadmngr.com` | NameCheap, CNAME → ahacdn.me (Russia) |
+| Domain (TDS) | `jnbhi.com` | NameCheap/AWS DNS |
+| Domain (TDS) | `bvtpk.com` | NameCheap/Cloudflare |
+| Domain (TDS) | `renamereptiliantrance.com` | Amazon Registrar, Servers.com SIN2 |
+| Domain (TDS) | `lr.dicconbumtrap.com` | Pananames, CNAME → aerithvel.com |
+| Domain (TDS) | `adsco.re` | Total Uptime Tech US |
+| Domain (TDS) | `acscdn.com` | GoDaddy/Cloudflare |
+| Domain (injector) | `tu.pinderecphory.com` | Pananames, CNAME → aerionvel.com |
+| Domain (CNAME fleet) | `aerionvel.com` | **NEW** — Created 2026-05-28, Amazon Registrar |
+| Domain (CNAME fleet) | `aerithvel.com` | **NEW** — Created 2026-05-28, Amazon Registrar |
+| IP block | `69.41.166.0/23` | **NEW** — Servers.com SIN2, Singapore |
+| IP block | `172.241.6.0/22` | **NEW** — Servers.com SIN2, Singapore |
+| IP block | `23.109.134.0/22` | **NEW** — Servers.com SIN2, Singapore |
+| IP (CDN backend) | `69.41.166.29` | Known origin IP (no PTR) |
+| IP (CDN backend) | `69.41.166.150` | Servers.com SIN2 pool |
+| IP (CDN backend) | `213.174.146.94` | wpadmngr.com via ahacdn.me, Russia |
+| IP (CDN backend) | `213.174.146.95` | wpadmngr.com via ahacdn.me, Russia |
+| IP (CF proxy) | `104.21.4.212` | vid30s.com, Cloudflare Anycast |
+| IP (CF proxy) | `172.67.132.128` | vid30s.com, Cloudflare Anycast |
+| IP (CF proxy) | `172.67.68.241` | vidara.to, Cloudflare Anycast |
+| GA ID | `G-RRBBHD087X` | Pivot via PublicWWW for full bait network |
+| Affiliate ID | `m2v063z8` | MaaS panel handle |
+| Campaign ID | `121024` | TDS campaign; path: /rdESS52vpKe/121024 |
+| Cookie | `GL_UI4` | Base64/Zlib victim fingerprint |
+| Cookie | `GL_GI10` | Base64/Zlib compromise status flag |
 
 ---
 
-## 13. If You Clicked One of These Links
+## 14. If You Clicked One of These Links
 
 If you followed one of these URLs from X/Twitter and interacted with the page — especially if you saw a "Cloudflare verification" or "browser update" prompt asking you to press Win+R:
 
@@ -416,18 +553,26 @@ If you followed one of these URLs from X/Twitter and interacted with the page �
 
 ---
 
-## 14. Next Steps for Researchers
+## 15. Next Steps for Researchers
 
-- **CDP clipboard hook** — load the page in an instrumented Chromium instance with the Chrome DevTools Protocol active, hook `navigator.clipboard.writeText()` before page load. Fastest way to extract the raw PowerShell command without reversing 88KB of obfuscated JavaScript.
-- **PassiveDNS pivot on `69.41.166.29`** — query SecurityTrails or RiskIQ. This IP hosts `pinderecphory.com` directly, no Cloudflare proxy. Should reveal sibling TDS domains on the same block.
-- **PublicWWW sweep on `G-RRBBHD087X`** — one query, potentially 100+ bait domains using the same Google Analytics ID.
-- **Cookie decode** — Base64-decode then zlib-decompress `GL_UI4` and `GL_GI10`. The `eJ` prefix is the zlib magic bytes. Extract the victim profile schema and compromise flag logic.
+**Tier 4 — pending external tooling:**
+
+- **CDP clipboard hook** — load the page in an instrumented Chromium instance with CDP active, hook `navigator.clipboard.writeText()` before page load. Fastest way to extract the raw PowerShell command without reversing 88KB of obfuscated JavaScript. Also hook `document.execCommand('copy')` as a fallback path.
+- **Censys/FOFA fleet discovery** — regex `aer.{2,6}vel\.com` on Censys (`parsed.names`) or FOFA to find all CNAME parking domains in the `aerionvel`/`aerithvel` naming fleet. The operator likely has 5–20 of these deployed simultaneously.
+- **Passive DNS pivot on `69.41.166.0/23`** — query SecurityTrails or RiskIQ for all hostnames that have ever resolved to IPs in the Servers.com SIN2 blocks. This will surface the full historical TDS domain inventory for this actor, including decommissioned campaigns.
+- **PublicWWW sweep on `G-RRBBHD087X`** — one query, potentially 100+ bait domains using the same Google Analytics ID. Highest-yield attribution pivot currently available.
+- **Cookie decode** — Base64-decode then zlib-decompress `GL_UI4` and `GL_GI10`. The `eJ` prefix is the zlib deflate magic bytes. Extract the victim profile schema and compromise flag logic.
 - **Forum OSINT on `m2v063z8`** — search BreachForums, XSS.is, Exploit.in for the affiliate handle.
 - **Campaign ID correlation (`121024`)** — cross-reference in ThreatFox, OTX AlienVault, and vendor threat reports to link to previously documented ClickFix/ClearFake operations.
+- **Abuse reports to file now:**
+  - `abuse@servers.com` — attach CNAME chain evidence, IP blocks, CORS header proof
+  - `trustandsafety@support.aws.com` — for `aerionvel.com` and `aerithvel.com` (3 days old, fastest possible takedown window)
+  - `abuse@namecheap.com` — for `vid30s.com`, `vidara.to`, `dd133.com`, `jnbhi.com`
+  - `https://abuse.cloudflare.com` — for Cloudflare-proxied bait domains
 
 ---
 
-## 15. For SOC / Blue Teams
+## 16. For SOC / Blue Teams
 
 - Block all IOC domains at DNS resolver, NGFW, and web proxy level.
 - Deploy EDR detection: alert on `powershell.exe -w hidden` or `-WindowStyle Hidden` spawned from `explorer.exe` or `cmd.exe` where commandline contains `DownloadString`, `iex`, or `Invoke-Expression` with a remote URI.

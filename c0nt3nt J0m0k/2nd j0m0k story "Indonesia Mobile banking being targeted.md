@@ -1,12 +1,44 @@
-# Hirudo Android Banking RAT: Deep Research Report on the `livin/latest.apk` Cluster
+# Eight APK Paths, Seven Indonesian Banks: Following Hirudo's Patched Banking App Trail
 
-## Executive assessment
+*An investigation into Hirudo's Android banking RAT infrastructure, a CloudFront distribution hosting bank-specific APK routes, and why replacing the real banking app is more dangerous than simply drawing a fake login screen.*
 
-The data you supplied provides the missing link needed to reconstruct, with **high confidence, the seven Indonesian banks targeted by Hirudo's patched-application replacement operation**.
+**(sudo3rs)** · October 15, 2026 · ~23 min read
 
-ThreatFabric independently reports that Hirudo maintains a registry of 42 financial applications but has **purpose-built replacement APKs for exactly eight Indonesian banking apps belonging to seven banks**. ThreatFabric also identifies `d3q4tlm7pw29zr[.]cloudfront[.]net` specifically as the download host for those eight patched banking applications. citeturn17search0 The infrastructure and behavior described in the ThreatFabric report are also reproduced in the material supplied with this investigation. fileciteturn0file2
+`#ThreatIntelligence` `#AndroidMalware` `#Hirudo` `#BankingTrojan` `#MalwareAnalysis` `#Indonesia`
 
-Your extracted strings expose the eight bank-specific paths on that host:
+---
+
+It started with a path that looked almost too ordinary:
+
+```text
+/livin/latest.apk
+```
+
+On its own, that path tells you very little. `latest.apk` is a generic filename. But the surrounding infrastructure was not generic. The path appeared in a set of extracted strings associated with a CloudFront distribution that ThreatFabric had just identified as part of **Hirudo**, an Android banking remote-access trojan (RAT). Their October 14, 2026 research described **eight purpose-built replacement banking applications belonging to seven Indonesian banks**. It did not publicly name those seven banks. [1]
+
+The strings in the investigation material contained eight separate download routes. One pointed to `livin`. Another to `mybca`. Then `btn`, `bni`, `bri`, `bsi`, `jak`, and an oddly misspelled `bcamoblie`.
+
+That spelling mistake was interesting. The count was even more interesting.
+
+I mapped the route names against official Indonesian banking products and the infrastructure described in ThreatFabric's research. The result was a strong, internally consistent target reconstruction: **Mandiri, BTN, BCA, BNI, BRI, BSI, and Bank Jakarta**, with two routes apparently belonging to BCA.
+
+But the bigger story is the malware's approach. Hirudo does not have to stop at putting a fake login page over a legitimate banking application. For selected targets, it tries to **uninstall the real bank app and install a modified copy that can lie to its own security controls**.
+
+> *A familiar banking icon is not proof of a genuine banking application. When the application itself has been modified, even its security checks may be answering the wrong questions.*
+
+**Important scope note:** This is a reconstruction of *targeting*, based on supplied extracted strings, publicly documented infrastructure, vendor reverse engineering, and official banking-product references. It is **not evidence that any of the seven banks' backend systems were breached**, nor does it establish the number of infected customers. The eight bank-specific binaries were not individually retrieved and verified as part of this write-up.
+
+---
+
+## 1. The Original Finding: Eight Paths on One Distribution
+
+ThreatFabric's report describes a registry containing **42 financial applications**, but a smaller subset of **eight Indonesian apps across seven banks** has dedicated malicious replacement APKs. It explicitly identifies the following Amazon CloudFront distribution as the host for that replacement set. [1]
+
+```text
+d3q4tlm7pw29zr[.]cloudfront[.]net
+```
+
+The extracted material supplied for this investigation contained these eight paths:
 
 ```text
 d3q4tlm7pw29zr[.]cloudfront[.]net/livin/latest[.]apk
@@ -19,218 +51,169 @@ d3q4tlm7pw29zr[.]cloudfront[.]net/bsi/latest[.]apk
 d3q4tlm7pw29zr[.]cloudfront[.]net/jak/latest[.]apk
 ```
 
-Those names produce an unusually clean result:
+The shared host is the important link to the vendor's findings. The directory names then offer potential clues to the target applications.
 
-**Bank Mandiri, Bank Tabungan Negara, Bank Central Asia, Bank Negara Indonesia, Bank Rakyat Indonesia, Bank Syariah Indonesia, and Bank Jakarta/JakOne.**
+There are limits to that inference. A path named `/bni/` identifies an intended bank much more confidently than it identifies an exact APK version. Attackers can name files however they want. They can also change the object stored behind `latest.apk` without changing the URL.
 
-The reason eight applications correspond to seven banks is almost certainly **BCA**, for which the attacker infrastructure contains two independent routes: `mybca` and the misspelled `bcamoblie`, corresponding to **myBCA** and **BCA mobile**. BCA itself confirms that these are distinct BCA mobile-banking applications and that myBCA was introduced as a complement to BCA mobile. citeturn15search1turn15search10turn15search12
+And a failed download attempt for the exact `/livin/latest.apk` object means I cannot use that object to claim an independently calculated hash, signing certificate, package ID, or binary diff here.
 
-This is a **targeting attribution**, not evidence that the banks' backend systems were compromised. Hirudo's documented technique attacks the **customer's Android device and a modified copy of the banking client**, attempting to defeat security controls from inside the replacement application. citeturn17search0
+**What can be said:** the infrastructure matches a vendor-documented malicious distribution, and its route labels align remarkably well with the reported eight-application/seven-bank count.
 
-One important research limitation: I attempted to retrieve the exact supplied `livin/latest.apk` path directly, but the retrieval environment returned a cache/fetch failure. Therefore, I am **not claiming to have independently calculated the SHA-256, signing certificate, package name, or binary diff of that particular Livin replacement APK** in this session. citeturn18view0 The attribution below instead combines the route names you extracted, ThreatFabric's independently documented infrastructure, the known Hirudo RAT sample metadata, and official bank sources.
+---
 
-**Overall assessment: Critical / high-confidence active banking-malware infrastructure.** ThreatFabric reported the Hirudo research on October 14, 2026 and stated that some associated download routes remained active into October 2026. citeturn17search0turn17search1
+## 2. Reconstructing the Seven Indonesian Banking Targets
 
-## Target reconstruction: the Indonesian banks
+The route-to-bank mapping is straightforward in several cases, but it is worth separating **bank-level identification** from **identification of a specific app build**.
 
-The eight route names are especially valuable because ThreatFabric's public report describes the **number** of affected banks and applications but does not publicly enumerate their identities. The routes effectively provide a target manifest.
-
-| Attacker-controlled route | Attributed bank | Likely legitimate application being impersonated/repacked | Confidence |
+| Download route | Bank indicated by the route | Likely targeted banking app | Attribution assessment |
 |---|---|---|---|
-| `.../livin/latest.apk` | **Bank Mandiri** | **Livin' by Mandiri** | **Very high** |
-| `.../btn/latest.apk` | **Bank Tabungan Negara (BTN)** | Most likely **balé by BTN / former BTN Mobile** | **High bank / medium-high app** |
-| `.../mybca/latest.apk` | **Bank Central Asia (BCA)** | **myBCA** | **Very high** |
-| `.../bcamoblie/latest.apk` | **Bank Central Asia (BCA)** | **BCA mobile** | **Very high** |
-| `.../bni/latest.apk` | **Bank Negara Indonesia (BNI)** | Most likely **wondr by BNI**; exact build remains unverified | **High bank / medium app** |
-| `.../bri/latest.apk` | **Bank Rakyat Indonesia (BRI)** | Most likely **BRImo** | **High bank / high app** |
-| `.../bsi/latest.apk` | **Bank Syariah Indonesia (BSI)** | Most likely **BYOND by BSI**; legacy BSI Mobile is another possibility | **High bank / medium app** |
-| `.../jak/latest.apk` | **Bank Jakarta / JakOne ecosystem** | **JakOne Mobile** | **Very high** |
+| `/livin/latest.apk` | Bank Mandiri | Livin' by Mandiri | Very high for bank and app branding |
+| `/btn/latest.apk` | Bank Tabungan Negara | balé by BTN / BTN Mobile lineage | High for bank; exact build unverified |
+| `/mybca/latest.apk` | Bank Central Asia | myBCA | Very high for bank and app branding |
+| `/bcamoblie/latest.apk` | Bank Central Asia | BCA mobile | Very high for bank and app branding; route contains a typo |
+| `/bni/latest.apk` | Bank Negara Indonesia | Likely wondr by BNI | High for bank; app build unverified |
+| `/bri/latest.apk` | Bank Rakyat Indonesia | Likely BRImo | High for bank; app build unverified |
+| `/bsi/latest.apk` | Bank Syariah Indonesia | BYOND by BSI or legacy BSI Mobile | High for bank; exact app uncertain |
+| `/jak/latest.apk` | Bank Jakarta | Likely JakOne Mobile | High for bank and product ecosystem |
 
-### Bank Mandiri
+The attribution levels above reflect how strongly the **route names** match known products. They do **not** measure confidence that each specific binary was obtained, executed, or forensically identified.
 
-`livin` is effectively unambiguous. Bank Mandiri's own website identifies **Livin' by Mandiri** as its financial super app and directs Android users to official application stores for installation. citeturn16search2turn16search6
+### Mandiri: `/livin/`
 
-This makes:
+`livin` strongly matches **Livin' by Mandiri**. There is little branding ambiguity. But this is a mapping between the attacker's pathname and an official banking product, not proof that a genuine Mandiri signing certificate was present in the attacker-hosted APK.
+
+### BTN: `/btn/`
+
+`btn` points to **Bank Tabungan Negara**. The exact client is less certain. BTN introduced **balé by BTN** as its super app in February 2025 and describes it as the successor to BTN Mobile. [3]
+
+A route with an old or generic name can keep serving newer binaries. Without examining the downloaded APK's package information and resources, choosing a particular generation would be speculation.
+
+### BCA: `/mybca/` and `/bcamoblie/`
+
+This pair deserves its own section. Both **myBCA** and **BCA mobile** are real, distinct BCA applications. BCA's official instructions explicitly discuss installing and migrating them separately. [2]
+
+The string `bcamoblie` appears to be an operator-side misspelling of `bcamobile`. I would preserve it exactly as observed in an IOC list, because correcting the typo would break matching against the actual path.
+
+### BNI: `/bni/`
+
+The banking institution is a strong match for **BNI**. Its current banking ecosystem prominently features **wondr by BNI**, launched in July 2024, and BNI subsequently announced migration from the older BNI Mobile Banking service. [4]
+
+That makes wondr the leading app candidate, **not a binary-confirmed result**.
+
+### BRI: `/bri/`
+
+`bri` naturally matches **Bank Rakyat Indonesia**, and **BRImo** is the leading consumer mobile-banking candidate. The app identification still needs confirmation from the replacement binary itself.
+
+### BSI: `/bsi/`
+
+`bsi` matches **Bank Syariah Indonesia**. BSI says **BYOND by BSI** is its primary mobile-banking channel, but it also reported that **BSI Mobile** remained active during the transition in 2026. [5]
+
+So `/bsi/latest.apk` cannot establish which app lineage was repackaged.
+
+### Bank Jakarta: `/jak/`
+
+The `/jak/` label is strongly consistent with **Bank Jakarta's JakOne Mobile** ecosystem. The precise application and release would again require checking the APK itself.
+
+> *A directory name is a useful attribution clue. A verified Android package name and signing certificate would be much stronger evidence.*
+
+---
+
+## 3. The Detail That Makes the Numbers Fit: BCA Appears Twice
+
+ThreatFabric's published count is specific: **eight modified apps, seven banks**. [1]
+
+The extracted paths supply an elegant explanation:
 
 ```text
-/livin/latest.apk
-        ↓
-Bank Mandiri
-        ↓
-Livin' by Mandiri
+Eight bank-specific routes
+         |
+         +-- Mandiri       /livin/
+         +-- BTN           /btn/
+         +-- BCA           /mybca/
+         |                  /bcamoblie/   <-- second BCA route
+         +-- BNI           /bni/
+         +-- BRI           /bri/
+         +-- BSI           /bsi/
+         +-- Bank Jakarta  /jak/
+         |
+         v
+     8 routes / 7 banks
 ```
 
-a **very-high-confidence attribution**.
+This does not prove that every underlying APK was successfully replaced on a victim device. What it does provide is a **coherent target manifest** that fits the vendor's reported total without inventing an eighth bank.
 
-The crucial distinction is that an APK obtained from the Hirudo CloudFront path would not be an official Mandiri distribution merely because it resembles Livin'. ThreatFabric's analysis says these replacements retain the target application's identity characteristics where useful but are modified and re-signed by the attacker. citeturn17search0
+It is also the main finding that differentiates this route analysis from a general summary of Hirudo. The vendor disclosed the scale and the host; the supplied route list provides names that can be investigated as potential target identities.
 
-### Bank Tabungan Negara
+---
 
-`btn/latest.apk` strongly identifies **PT Bank Tabungan Negara (Persero) Tbk**. The only ambiguity is which generation of its mobile client was used as the attacker's patching base.
+## 4. The First Stage: A Normal-Looking App With a Fake Update
 
-BTN officially renamed/replaced **BTN Mobile** with **balé by BTN**, launching balé as its super app in February 2025. BTN explicitly says it was “previously known as BTN Mobile,” and by March 2026 described balé as an important primary digital platform. citeturn14search0turn14search2
+Before the banking-app replacement, the operator still needs to establish control of the victim's Android device.
 
-Therefore:
+ThreatFabric reports a **two-application delivery design**. The initial app presents itself as something that people might download voluntarily: a shopping application, an adult-video application, or a short-drama/video service. Examples described in its report include Shopora, 1V1 X, KoiShort, and ZoyaTV. [1]
+
+The lure may actually display functional content. This matters because a user is less likely to suspect an application that appears to do what its name promises.
+
+Then comes the fake update.
 
 ```text
-/btn/latest.apk
-        ↓
-Bank Tabungan Negara
-        ↓
-likely balé by BTN / BTN Mobile code lineage
+Advertising / download lure
+             |
+             v
+   Shopping or video app
+   (apparently functional)
+             |
+             v
+      "Update required"
+             |
+             v
+      Separate RAT APK
+             |
+             v
+  Permissions / Accessibility
+             |
+             v
+       HIRUDO RAT
 ```
 
-The **bank identification is high confidence**. The exact APK generation cannot be established from the filename alone.
+The user is not necessarily exploiting an Android vulnerability. The operation relies heavily on **installation prompts, user trust, and abuse of powerful platform features**.
 
-### Bank Central Asia
+The distinction between the lure and the payload is important for incident response. Deleting the obvious shopping or entertainment app may not remove the separately installed RAT.
 
-This is the most informative pair:
+---
 
-```text
-/mybca/latest.apk
-/bcamoblie/latest.apk
-```
+## 5. The RAT Sample: What the Metadata Actually Shows
 
-BCA's official material explicitly identifies both **myBCA** and **BCA mobile** as BCA applications, including a current September 2026 notice discussing myBCA functionality exposed to BCA mobile users. citeturn15search3turn15search8
-
-The typo `bcamoblie` instead of `bcamobile` is likely an operator-side naming mistake. What matters analytically is that there are **two separate BCA-related download objects**.
-
-That explains ThreatFabric's otherwise curious statement:
-
-> eight applications, seven banks
-
-without needing to invent an eighth institution. ThreatFabric independently gives exactly that count. citeturn17search0
-
-The resulting model is:
+The investigation material includes metadata for a known Hirudo sample that ThreatFabric identifies as **Hirudo RAT v7.8.166**. [1]
 
 ```text
-Bank Central Asia
-   ├── myBCA        → /mybca/latest.apk
-   └── BCA mobile   → /bcamoblie/latest.apk
-```
-
-This is one of the strongest findings in the supplied dataset.
-
-### Bank Negara Indonesia
-
-`bni/latest.apk` points directly to **Bank Negara Indonesia**.
-
-By 2026, BNI's primary modern mobile application is **wondr by BNI**. BNI states that wondr launched on July 5, 2024 and identifies it as a mobile-banking application. citeturn14search5turn14search6
-
-However, I would not label the malicious file specifically as a patched wondr APK until its package name and resources are obtained. A malicious infrastructure operator could preserve a generic route such as `/bni/` while replacing the underlying target build over time.
-
-So the defensible conclusion is:
-
-**BNI is confirmed at high confidence; wondr by BNI is the leading candidate for the exact application.**
-
-### Bank Rakyat Indonesia
-
-The `bri` identifier corresponds naturally to **Bank Rakyat Indonesia**. BRI's official material identifies **BRImo** as its super app and reports it as its major digital customer platform. citeturn15search6turn15search16
-
-Thus:
-
-```text
-/bri/latest.apk
-       ↓
-BRI
-       ↓
-very likely BRImo
-```
-
-The bank attribution is high confidence and the application attribution is also strong, although a binary-level confirmation would still require the APK's original application ID, resources, version code, and signing history.
-
-### Bank Syariah Indonesia
-
-`bsi/latest.apk` points to **Bank Syariah Indonesia**.
-
-BSI's current main application is **BYOND by BSI**. In March 2026 BSI described BYOND as a primary mobile-banking channel and confirmed that an older **BSI Mobile** application also remained in use during the transition period. citeturn15search0 By August 2026, BSI continued to promote BYOND as its current mobile-banking channel. citeturn15search17
-
-Consequently, there are two plausible bases for the attacker APK:
-
-```text
-/bsi/latest.apk
-       ↓
-Bank Syariah Indonesia
-       ├── BYOND by BSI       ← most likely in 2026
-       └── legacy BSI Mobile  ← cannot yet be excluded
-```
-
-The bank identification is high confidence; the specific app remains a medium-confidence attribution until the binary is inspected.
-
-### Bank Jakarta and JakOne Mobile
-
-The `/jak/latest.apk` route is strongly consistent with **JakOne Mobile**. Bank Jakarta's current official site lists JakOne Mobile as its digital-banking smartphone application and directs customers to obtain it from Google Play or Apple's App Store. citeturn16search14turn16search16
-
-Therefore the likely target is:
-
-```text
-/jak/latest.apk
-       ↓
-Bank Jakarta
-       ↓
-JakOne Mobile
-```
-
-This completes the seven-bank set and makes the route list fit ThreatFabric's **eight-app / seven-bank** statement exactly. citeturn17search0
-
-### Reconstructed target set
-
-The best-supported list is therefore:
-
-**Bank Mandiri → BTN → BCA → BNI → BRI → BSI → Bank Jakarta/JakOne.**
-
-BCA accounts for two of the eight patched applications.
-
-Again, this should be worded operationally as **“banks whose Android applications were targeted for malicious replacement”**, not “banks that were hacked.”
-
-## Artifact and RAT sample analysis
-
-The accompanying Hirudo sample metadata provides useful independent evidence for understanding what sits behind those patched banking APKs.
-
-The known sample:
-
-```text
-SHA-256
+SHA-256:
 b2270c29b3d0a49a716730d6ef108cffec0b1a4b159dd02e93333fb85e492b99
 
-Package
-com.r9nkvx.qw2mpl
-
-Displayed version
-7.8.166
-
-Size
-45.94 MB
-
-Target SDK
-36
+Package:     com.r9nkvx.qw2mpl
+Version:     7.8.166
+Size:        approximately 45.94 MB
+Target SDK:  36
+Platform:    Android
 ```
 
-is classified in the supplied sample information as an Android executable and contains a broad set of components and permissions consistent with a fully interactive mobile RAT. fileciteturn0file0 ThreatFabric identifies that same hash and package as **Hirudo RAT v7.8.166**. citeturn17search0
+That hash belongs to the documented RAT sample, **not to the unverified `/livin/latest.apk` replacement**. Mixing those two artifacts would be a serious analytical error.
 
-### The permission profile is coherent, not random
+The supplied manifest and component inventory includes capabilities associated with device surveillance and remote control:
 
-Several declared capabilities are particularly revealing:
-
-| Android capability observed | Security significance |
+| Observed capability / component | Why it matters |
 |---|---|
-| `READ_SMS`, `RECEIVE_SMS` | Read incoming or stored SMS, relevant to OTP/message theft |
-| `CAMERA` | Camera access |
-| `RECORD_AUDIO` | Microphone access |
-| `SYSTEM_ALERT_WINDOW` | Ability to draw over other applications when authorized |
-| Accessibility service components | Can inspect or interact with foreground UI when enabled |
-| `FOREGROUND_SERVICE_MEDIA_PROJECTION` | Supports persistent screen-sharing/capture workflows |
-| `REQUEST_INSTALL_PACKAGES` | Relevant to installation of additional APKs |
-| `RECEIVE_BOOT_COMPLETED` | Enables restart/persistence logic after reboot |
-| `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` | Helps maintain long-running background behavior |
-| `MANAGE_EXTERNAL_STORAGE` | Broad filesystem access subject to Android restrictions |
-| VPN-related components | Supports traffic manipulation or tunneling behavior |
+| `READ_SMS`, `RECEIVE_SMS` | Potential access to SMS content, including messages used in authentication workflows |
+| Accessibility services | UI observation and interaction when enabled and appropriately configured |
+| `SYSTEM_ALERT_WINDOW` | Potential overlay-based impersonation when permitted |
+| `CAMERA`, `RECORD_AUDIO` | Camera and microphone access |
+| `FOREGROUND_SERVICE_MEDIA_PROJECTION` | Screen-capture / sharing workflows |
+| `REQUEST_INSTALL_PACKAGES` | Additional APK installation pathways |
+| `RECEIVE_BOOT_COMPLETED` | Ability to respond after device restart |
+| `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` | Attempts to remain active in the background |
+| VPN-related service components | Network tunneling or manipulation capabilities |
 
-These declarations appear together in the supplied sample metadata. fileciteturn0file0 ThreatFabric independently reports SMS collection, front- and rear-camera sessions, screen viewing via WebRTC, credential theft, lock-screen capture, application installation, and device takeover functionality in Hirudo. citeturn17search0
-
-Android's Accessibility framework is especially important because an enabled service can obtain the root node of the active window if configured for window-content retrieval; Android also supports retrieving interactive window information through the Accessibility APIs. citeturn19search0turn19search1 In banking-malware context, this creates the technical foundation for detecting what app is on screen, reading UI state, and programmatically assisting interactions.
-
-The APK metadata goes beyond permissions. It exposes components such as:
+Several component names give additional context:
 
 ```text
 com.nirenr.talkman.a11y.ipc.A11yCoreBridgeService
@@ -241,683 +224,537 @@ com.nirenr.talkman.vpn.TunnelPipeService
 com.nirenr.talkman.push.MyFirebaseMessagingService
 ```
 
-along with receivers for events including:
+The same supplied metadata includes receiver actions for `BOOT_COMPLETED`, `LOCKED_BOOT_COMPLETED`, `USER_UNLOCKED`, `SMS_RECEIVED`, screen-state changes, package-install events, and connectivity changes.
+
+There is a difference between **capability** and **observed execution**. Android permissions can be denied, restricted, or unavailable to third-party apps. A manifest entry does not prove that a particular function ran on a victim device.
+
+Nevertheless, the combination is consistent with the much broader credential capture, SMS access, screen viewing, camera use, and device control that ThreatFabric describes from reverse engineering. [1]
+
+> *One dangerous Android permission is not a malware verdict. A coordinated set of remote-control components, suspicious installation events, and known malicious infrastructure is a very different story.*
+
+---
+
+## 6. The Replacement Trick: Uninstall the Bank, Install a Lookalike
+
+This is the part that changes the threat model.
+
+A conventional banking overlay tries to fool the user by placing attacker-controlled content over the legitimate app. Hirudo has that kind of credential-theft functionality too, but for a selected set of Indonesian targets it attempts something more invasive: **replace the installed banking application itself**. [1]
+
+A simplified reconstruction looks like this:
 
 ```text
-BOOT_COMPLETED
-LOCKED_BOOT_COMPLETED
-USER_UNLOCKED
-SMS_RECEIVED
-SCREEN_ON
-SCREEN_OFF
-PACKAGE_ADDED
-CONNECTIVITY_CHANGE
+Hirudo RAT is active
+          |
+          v
+Observe installed / foreground apps
+          |
+          v
+Match a registered banking target
+          |
+          v
+Check expected app / signing identity
+          |
+          v
+Display deceptive update prompt
+          |
+          v
+Open Android uninstaller for genuine app
+          |
+          +------------------------------+
+          |                              |
+          v                              v
+  Genuine app removed          Download patched APK
+          |                              |
+          +---------------+--------------+
+                          |
+                          v
+              Install modified copy
+                          |
+                          v
+               Activate internal hooks
 ```
 
-These are directly present in the supplied APK metadata. fileciteturn0file0 Taken together with ThreatFabric's reverse engineering, they provide a much stronger behavioral picture than any individual permission would.
+Why uninstall first?
 
-A technical caveat is important: **a permission being declared in the manifest does not automatically mean Android will grant it**. Several sensitive or privileged Android permissions are restricted by platform policy or signing level. Therefore, the manifest is evidence of intended capability or code requirements, while runtime execution must still be confirmed separately.
+Because Android package signing exists for a reason. A replacement APK with the same package identifier but a different signing identity generally cannot be installed as a normal update over the trusted application. ThreatFabric reports that the malicious patched apps keep important identifying attributes while being signed with a **public Android test key**, not the bank's legitimate production key. [1]
 
-### What the application is designed to accomplish
-
-The observed feature set can be conceptually divided into five layers:
+So the attacker's workflow becomes:
 
 ```text
-                 HIRUDO RAT
-                     │
-        ┌────────────┼────────────┐
-        │            │            │
-  Device control   Collection   Persistence
-        │            │            │
- Accessibility      SMS          Boot
- Screen control     Camera       Foreground svc
- VPN/tunneling      Audio        alarms
-        │
-        ▼
- Banking-app discovery
-        │
-        ▼
- Genuine bank app removal
-        │
-        ▼
- Patched bank APK installation
-        │
-        ▼
- In-process security bypass
+GENUINE BANKING APP
+  package = expected identity
+  signer  = bank's trusted certificate
+            |
+            v
+         UNINSTALL
+            |
+            v
+PATCHED BANKING APP
+  package = familiar identity
+  signer  = different / test certificate
 ```
 
-ThreatFabric's reverse engineering supports this broader architecture and describes Hirudo as combining credential phishing, remote device control, screen and camera access, SMS theft, and replacement of selected banking applications. citeturn17search0
+The uninstall and installation prompts create a real opportunity to interrupt the attack. But if the victim follows the fake update instructions, the result can be a familiar-looking app running code the bank never approved.
 
-## Attack chain and patched-app mechanics
+**Same icon does not mean same signer. Same package name does not mean same code.**
 
-Hirudo is more sophisticated than a conventional Android banking overlay because the operator does not stop at placing a fake login window above the bank application.
+---
 
-Instead, for the high-value Indonesian targets, the attacker attempts to **replace the real bank APK**.
+## 7. Inside the Patched App: How the Security Checks Get Blinded
 
-### Initial compromise
-
-ThreatFabric observed lure applications themed around shopping, adult video, and short-drama content. The lure remains functional enough to appear legitimate while presenting what looks like an application update. That “update” actually installs the separate Hirudo RAT payload. citeturn17search0
-
-The simplified chain is:
+According to ThreatFabric's reverse engineering, the banking client is not necessarily rebuilt from scratch. Much of the original application remains, while a small startup modification loads an injected hooking engine. The report identifies **YAHFA** for Java method hooking and **Dobby** for native-function hooking. [1]
 
 ```text
-Malicious advertisement / lure
-            │
-            ▼
- Functional-looking lure APK
-            │
-      "Update required"
-            │
-            ▼
-      Hirudo RAT APK
-            │
-   Accessibility enabled
-            │
-            ▼
-  Device takeover capability
+Modified banking APK
+|
++-- Original banking UI
++-- Original business logic
++-- Original network / API logic
++-- Original resources
+|
++-- Injected initialization
+    |
+    +-- Embedded hooking engine
+        |
+        +-- Java method hooks (YAHFA)
+        +-- Native hooks (Dobby)
+        +-- Signing-identity manipulation
+        +-- Accessibility-state concealment
+        +-- Screen-protection bypass
+        +-- Integrity / attestation interference
 ```
 
-The malicious logic is therefore split between at least two applications, reducing the amount of obviously malicious functionality that needs to exist in the initial lure. ThreatFabric explicitly describes this as a two-app architecture. citeturn17search0
+That is precisely why this attack is dangerous. A user might still see real menus, familiar transfer screens, and much of the usual app behavior. The injected components operate underneath that appearance.
 
-### Target detection
+### Signing certificate checks
 
-Once operational, the RAT maintains information about financial applications and monitors device activity. ThreatFabric reports **42 registered financial applications**, with the specialized replacement mechanism implemented for eight Indonesian applications. citeturn17search0
-
-For an eligible banking target, Hirudo uses Accessibility visibility and stored certificate information to identify the genuine application. citeturn17search0
-
-This means the malware is not blindly replacing random applications. It has a target-selection layer resembling:
+Consider an application asking Android which certificate signed its own APK.
 
 ```text
-foreground / installed application
-               │
-               ▼
-     Is package in target registry?
-               │
-          yes  ▼
-   Validate expected identity
-               │
-               ▼
-Is dedicated replacement available?
-               │
-          yes  ▼
-     Trigger replacement flow
+Actual modified APK:
+    signer = public test key
+
+Application asks:
+    "Which certificate signed this app?"
+                |
+                v
+         Injected hook
+                |
+                v
+Application receives:
+    bank's expected certificate data
 ```
 
-### Why the legitimate app must be removed
+ThreatFabric says the hooking engine can substitute expected signing information. The goal is to convince local code that the installed app is still genuine even though its actual APK signature is not. [1]
 
-This is one of the most important technical details in the campaign.
+### Accessibility checks
 
-ThreatFabric found that the malicious replacement preserves the bank application's original package name and version characteristics but is **signed using an Android test key rather than the genuine bank's signing key**. citeturn17search0
-
-Android's package update model prevents an APK signed by a different key from silently replacing an installed application with the same application ID. Android requires the update's signing certificate to match the installed application's signing certificate, barring valid signing-key rotation mechanisms. citeturn16search0turn16search1
-
-So Hirudo cannot simply perform:
+A banking app may look for active Accessibility services because those services can be abused to observe sensitive screens or automate UI interactions.
 
 ```text
-official.bank.apk
-        │
- attacker APK "update"
-        ▼
+Real device state:
+    Hirudo Accessibility service = ENABLED
+
+Banking client query:
+    "Which Accessibility services are enabled?"
+                |
+                v
+          Hooked result
+                |
+                v
+            []
 ```
 
-because the signatures do not match.
+The check may execute, but the response has been manipulated.
 
-It must instead perform:
+### `FLAG_SECURE` protection
+
+Android's `FLAG_SECURE` is commonly used by sensitive applications to limit screenshots and certain display-capture paths. ThreatFabric reports that Hirudo's patched code attempts to suppress this protection, enabling the malware's viewing functionality to capture previously protected banking screens. [1]
 
 ```text
-GENUINE BANK APP
- official certificate
-        │
-        ▼
-     uninstall
-        │
-        ▼
-ATTACKER-PATCHED BANK APP
- same package identity
- different/test signing key
+Expected:    Sensitive window -> FLAG_SECURE set
+
+Modified:    Sensitive window -> hook changes flags
+                                    |
+                                    v
+                           Capture protection reduced
 ```
 
-ThreatFabric reports that Hirudo opens the Android uninstaller for the original app and downloads the target-specific replacement in parallel. citeturn17search0
+The lesson is broader than any one API: **if hostile code runs inside the process that performs a security check, the check's local result may be hostile too**.
 
-This also exposes a natural defensive chokepoint: **unexpected uninstall/reinstall activity involving a financial application should be considered highly suspicious**, particularly if immediately preceded by Accessibility-driven prompts or followed by an installation from outside the official store.
+---
 
-### Why the replacement still looks authentic
+## 8. Play Integrity: A Verdict Is Not a Transaction Authorization
 
-ThreatFabric's reverse engineering found that the attackers do not rebuild the banking client from scratch. Instead, most of the original application code is preserved.
+Play Integrity is designed to help a backend assess signals about the app and environment involved in a request. Google's documented app-integrity information can include package identity, certificate digest, version, and application-recognition status. [6]
 
-A small initialization modification loads a bundled hooking engine. citeturn17search0
+A patched bank app signed with the wrong key should create an application-integrity problem.
 
-The conceptual structure becomes:
+But ThreatFabric reports an additional Hirudo technique: some patched builds interfere with key attestation and send Play Integrity requests through an **operator-controlled relay service**. Its analysis also identifies use of a publicly leaked keybox, with at least two associated certificates appearing in an attestation revocation list as compromised. [1]
+
+The reported relay endpoint is:
 
 ```text
-Original bank APK
-│
-├── Original UI
-├── Original network logic
-├── Original business logic
-├── Original bank APIs
-│
-└── injected startup logic
-       │
-       ▼
- malicious hooking engine
-       │
-       ├── Java hooks
-       ├── Native hooks
-       ├── signature spoofing
-       ├── Accessibility hiding
-       ├── screen-capture bypass
-       └── integrity manipulation
+43[.]225[.]157[.]157:8766/request_token
 ```
 
-This architecture is much harder for a victim to visually identify than a crude clone: the victim may effectively be looking at substantial amounts of genuine bank application code.
+This is not proof that every relay request succeeds, or that every bank backend would accept its result. The point is that the attacker is trying to make app-generated integrity signals less reliable.
 
-### Runtime hooking
-
-ThreatFabric identifies **YAHFA** for Java method replacement and **Dobby** for native-function hooking inside the patched application. citeturn17search0
-
-The significance of hooking is that the attacker does not necessarily have to remove every security check. It can allow a check to execute but intercept the function that supplies the answer.
-
-Conceptually:
+The defensive question should not simply be:
 
 ```text
-Bank app:
-"Which certificate signed me?"
-
-Normal Android:
-"Bank's production certificate"
-
-Patched app:
-        │
-        └── hook intercepts query
-                    │
-                    ▼
-         "Bank's production certificate"
-         even though APK is attacker-signed
+"Did the client send an Integrity token?"
 ```
 
-The same model is used against several classes of security control. citeturn17search0
-
-### Accessibility concealment
-
-A banking application may check whether suspicious Accessibility services are enabled.
-
-Hirudo's patched copy hooks this query so that the application receives an empty or attacker-selected response rather than the real state. citeturn17search0
-
-Conceptually:
+It should be closer to:
 
 ```text
-Actual device state:
-Hirudo Accessibility Service = ENABLED
-
-Bank application asks Android:
-"What Accessibility services are active?"
-
-Hook:
-intercepts return value
-
-Bank application sees:
-[]
+Is the verdict valid and correctly verified server-side?
+Does it identify the expected application and certificate?
+Is it bound to this user's protected operation?
+Does it match the actual request / transaction content?
+Is the evidence fresh and consistent with other risk signals?
+Are relevant attestation certificates revoked?
 ```
 
-This is an important lesson for mobile-security design: **a client-side check that runs inside an attacker-modified process can itself be modified**.
-
-### Screen protection bypass
-
-Banking apps frequently use `FLAG_SECURE` to restrict screenshots and display capture. Android documents `FLAG_SECURE` as a mechanism intended to prevent screenshots and prevent protected windows from being shown on insecure displays; Google explicitly notes its usefulness for sensitive apps such as banking software. citeturn19search13
-
-ThreatFabric says Hirudo's injected engine strips this protection so that banking screens become available to its remote viewing functionality. citeturn17search0
-
-The effective transition is:
+Google specifically documents `requestHash` for binding a Standard Play Integrity request to relevant action parameters; classic requests use a nonce-based approach. [7]
 
 ```text
-Bank application:
-Window.FLAG_SECURE = enabled
-              │
-              ▼
-         malicious hook
-              │
-              ▼
-FLAG_SECURE removed / suppressed
-              │
-              ▼
-screen becomes capturable
+Transfer requested
+      |
+      v
+Canonicalize protected request data
+      |
+      v
+Compute request digest for requestHash
+      |
+      v
+Obtain Integrity token
+      |
+      v
+Server verifies token and request binding
+      |
+      +-- app / certificate / version
+      +-- action / request digest
+      +-- freshness / reuse protection
+      +-- behavioral and account-level risk
+      |
+      v
+Server-side authorization decision
 ```
 
-### Play Integrity manipulation
+**Integrity is evidence to evaluate. It should never be the only authorization decision.**
 
-Play Integrity is supposed to give the backend signals about the application and device executing a sensitive request. Google's `appIntegrity` verdict can include:
+---
 
-```text
-packageName
-certificateSha256Digest
-versionCode
-appRecognitionVerdict
-```
+## 9. Infrastructure: The CloudFront Host Was Only One Layer
 
-and `PLAY_RECOGNIZED` means the application and certificate correspond to a version distributed through Google Play, whereas `UNRECOGNIZED_VERSION` indicates a package or certificate mismatch. citeturn19search9
+The extracted strings and ThreatFabric's published IOCs describe several infrastructure roles. The important thing is not to flatten all of them into the generic label "C2".
 
-That should make an attacker-test-signed banking APK problematic.
-
-Hirudo responds with a more elaborate mechanism. ThreatFabric reports that the modified applications contain logic for key-attestation manipulation and that Play Integrity requests in some patched apps are **relayed to an operator-controlled service**, rather than trusted exclusively as locally generated evidence. citeturn17search0
-
-ThreatFabric also reports a publicly leaked keybox and notes that at least two associated certificates appeared on Google's attestation revocation list as compromised. citeturn17search0
-
-This means that the defensive question should not simply be:
-
-```text
-"Did I receive an Integrity token?"
-```
-
-but:
-
-```text
-Was this token generated for:
-  this exact session?
-  this exact action?
-  this exact request body?
-  this package?
-  this certificate?
-  this device?
-  at this point in time?
-```
-
-Google recommends binding Standard Play Integrity requests to the protected operation through `requestHash`; classic requests use a nonce for analogous anti-replay/tampering properties. citeturn17search2
-
-That is directly relevant to Hirudo's relay technique.
-
-## Infrastructure and string triage
-
-Your string list contains two very different categories of URLs: **meaningful Hirudo infrastructure** and **ordinary third-party library artifacts**.
-
-Treating every URL extracted from an APK as an IOC would create a large number of false positives.
-
-### High-value Hirudo infrastructure
-
-The strongest indicators from your material are:
-
-| Indicator | Interpretation | Confidence |
+| Infrastructure | Reported or inferred role | Evidence basis |
 |---|---|---|
-| `d3q4tlm7pw29zr[.]cloudfront[.]net` | Dedicated host for eight patched Indonesian banking apps | **Very high** |
-| `/livin/latest.apk` | Bank Mandiri replacement route | **Very high attribution** |
-| `/btn/latest.apk` | BTN replacement route | **High attribution** |
-| `/mybca/latest.apk` | myBCA replacement route | **Very high attribution** |
-| `/bcamoblie/latest.apk` | BCA mobile replacement route | **Very high attribution** |
-| `/bni/latest.apk` | BNI replacement route | **High attribution** |
-| `/bri/latest.apk` | BRI replacement route | **High attribution** |
-| `/bsi/latest.apk` | BSI replacement route | **High attribution** |
-| `/jak/latest.apk` | JakOne replacement route | **Very high attribution** |
-| `jiekou[.]baojingtextile[.]cn` | Hirudo RAT configuration infrastructure | **Very high** |
-| `134[.]122[.]153[.]136:8085` | Hirudo HTTP API | **Very high** |
-| `134[.]122[.]153[.]136:18085` | Hirudo HTTP API | **Very high** |
-| `134[.]122[.]153[.]136:1883` | MQTT infrastructure | **Very high** |
-| `134[.]122[.]153[.]136:1884` | MQTT infrastructure | **Very high** |
-| `43[.]225[.]157[.]157:8766/request_token` | Reported Play Integrity relay | **Very high** |
+| `d3q4tlm7pw29zr[.]cloudfront[.]net` | Delivery of eight patched Indonesian banking APKs | ThreatFabric + supplied routes |
+| `jiekou[.]baojingtextile[.]cn` | Hirudo RAT configuration API | ThreatFabric |
+| `134[.]122[.]153[.]136:8085` and `:18085` | HTTP API | ThreatFabric |
+| `134[.]122[.]153[.]136:1883` and `:1884` | MQTT service | ThreatFabric |
+| `43[.]225[.]157[.]157:8766/request_token` | Play Integrity relay | ThreatFabric |
+| `www[.]helloharmonyos[.]com` | Lure registration / channel configuration | ThreatFabric |
+| `134[.]122[.]153[.]68:8080` | APK processing panel | ThreatFabric |
+| `134[.]122[.]153[.]92:8080` | APK processing panel | ThreatFabric |
+| `18[.]139[.]79[.]161` | APK source host / app-management console | ThreatFabric |
+| `d3s06yhcwfnwcx[.]cloudfront[.]net` | 1V1 X distribution | ThreatFabric |
+| `d21gcldn8gp80l[.]cloudfront[.]net` | KoiShort casino-themed distribution | ThreatFabric |
+| `dydjjnnjg7jeb[.]cloudfront[.]net` | KoiShort short-drama distribution | ThreatFabric |
 
-ThreatFabric independently identifies the same CloudFront distribution as the eight-banking-app host and `jiekou[.]baojingtextile[.]cn` as the RAT configuration API, along with the HTTP, MQTT, and Integrity-relay infrastructure shown above. citeturn17search0
+These infrastructure roles come from the vendor report unless explicitly described otherwise. I did not independently scan, authenticate to, or enumerate those hosts. [1]
 
-The CloudFront hostname deserves an important qualification: **Amazon CloudFront is a legitimate CDN service**. The IOC is the particular distribution and malicious objects hosted through it, not CloudFront as a technology. ThreatFabric specifically describes Hirudo as abusing legitimate advertising and cloud delivery infrastructure. citeturn17search0
+One detail matters operationally: **Amazon CloudFront is a legitimate CDN**. A malicious object on a particular distribution does not make `cloudfront.net` as a whole malicious. Blocking all of CloudFront would create enormous collateral damage.
 
-### The `jiekou.baojingtextile.cn` API strings
+The actionable IOC is the **specific malicious distribution**, ideally combined with path, HTTP metadata, app-install telemetry, and the surrounding campaign indicators.
 
-Your memory extraction contains:
+---
+
+## 10. The Configuration API Strings
+
+The supplied memory strings include several paths under the reported configuration domain:
 
 ```text
 jiekou[.]baojingtextile[.]cn/Appapi/register/appkey/abc123456
-
 jiekou[.]baojingtextile[.]cn/appapi/appInit/appkey/abc123456
-
 jiekou[.]baojingtextile[.]cn/appapi/getSharePid/appkey/abc123456
-
 jiekou[.]baojingtextile[.]cn/appapi/playPage/appkey/abc123456/did/
 ```
 
-ThreatFabric's independent classification of this domain as Hirudo's **RAT configuration API** makes these strings materially important. citeturn17search0
-
-The endpoint names suggest a logical workflow:
+The endpoint names suggest a possible control-plane sequence:
 
 ```text
-register
-   │
-   ├── likely client/device registration
-   │
-appInit
-   │
-   ├── likely application/config bootstrap
-   │
-getSharePid
-   │
-   ├── likely campaign / sharing / attribution data
-   │
-playPage
-   │
-   └── likely page/content configuration
+register       -> possible registration
+appInit        -> possible configuration/bootstrap
+getSharePid    -> possible sharing/campaign identifier
+playPage       -> possible page/content configuration
 ```
 
-Those functional meanings are **analytical inferences from endpoint naming**, not confirmed protocol definitions.
+**Those meanings are hypotheses derived from names, not confirmed request/response semantics.**
 
-Likewise, the literal:
+Similarly, `appkey/abc123456` is a hardcoded credential-like string but cannot be classified as an actual authentication secret without protocol analysis. It could be a campaign parameter, placeholder, routing key, or genuine access token.
+
+What makes it useful right now is its potential value as a **clustering marker**. Finding the same unusual API pattern in another sample would provide a promising pivot, especially alongside a matching package family or infrastructure indicator.
+
+---
+
+## 11. String Extraction: Not Every URL Is an IOC
+
+One of the easiest ways to make malware triage noisy is to export every URL from memory or a decompiled APK and call all of them malicious.
+
+The supplied extraction also contains links to ordinary Android ecosystem components and library references, including:
 
 ```text
-appkey/abc123456
+apache.org/licenses/LICENSE-2.0
+schemas.android.com/apk/res/android
+developer.android.com/training/articles/direct-boot
+crashpad.chromium.org
+firebase-settings.crashlytics.com
+app-measurement.com
+android.googlesource.com/toolchain/llvm-project
+youtrack.jetbrains.com
+github.com/TooTallNate/Java-WebSocket
 ```
 
-is clearly a hardcoded credential-like/configuration value, but static extraction alone cannot establish whether it is a genuine authorization secret, tenant identifier, placeholder, or merely an API-routing parameter.
-
-It should nevertheless be retained in threat-hunting records because it may provide a useful clustering primitive across related APKs.
-
-### Infrastructure beyond your string dump
-
-ThreatFabric also attributes the following infrastructure to the same operation:
+These can originate from bundled open-source licenses, XML namespaces, SDK documentation, crash reporters, Firebase modules, Google measurement libraries, and toolchain dependencies.
 
 ```text
-www[.]helloharmonyos[.]com
-    lure registration / channel configuration
-
-134[.]122[.]153[.]68:8080
-134[.]122[.]153[.]92:8080
-    APK-processing panels
-
-18[.]139[.]79[.]161
-    APK source host / app-management console
-
-d3s06yhcwfnwcx[.]cloudfront[.]net
-    1V1 X distribution
-
-d21gcldn8gp80l[.]cloudfront[.]net
-    KoiShort casino route
-
-dydjjnnjg7jeb[.]cloudfront[.]net
-    KoiShort short-drama route
+STRING FOUND IN APK
+         !=
+CONNECTION OBSERVED ON DEVICE
+         !=
+MALICIOUS NETWORK ACTIVITY
 ```
 
-These are documented by ThreatFabric as parts of the broader Hirudo infrastructure rather than inferred solely from your sample. citeturn17search0
+That distinction is not optional. A legitimate framework URL may be present in both a clean Android application and a malicious repackaged copy.
 
-### Strings that should not be treated as Hirudo IOCs
+I would prioritize indicators with **campaign-specific context**: dedicated replacement routes, the documented configuration domain, known RAT package names and hashes, and correlated unexpected banking-app installation events.
 
-A substantial part of your extraction is normal Android or embedded-library residue.
+---
 
-Examples include:
+## 12. Reconstructed Attack Timeline
+
+Combining the published Hirudo behavior with the supplied target routes produces this incident hypothesis:
 
 ```text
-http://www.apache.org/licenses/LICENSE-2.0
-http://www.apache.org/licenses/
-http://www.eclipse.org/legal/epl-v10.html
-
-https://developer.android.com/training/articles/direct-boot
-http://schemas.android.com/apk/res/android
-http://schemas.android.com/apk/res-auto
-
-https://crashpad.chromium.org/
-https://crashpad.chromium.org/bug/new
-https://crashpad.chromium.org/truncated
-
-https://firebase-settings.crashlytics.com/...
-
-https://app-measurement.com/a
-https://app-measurement.com/s
-https://app-measurement.com/s/d
-
-https://android.googlesource.com/toolchain/llvm-project
-https://youtrack.jetbrains.com/issue/KT-55980
-https://github.com/TooTallNate/Java-WebSocket/...
+T0    Victim encounters malicious advertisement / download lure
+ |
+T1    Victim installs a functional-looking shopping or media app
+ |
+T2    Lure displays a fake mandatory update
+ |
+T3    Separate Hirudo RAT APK is installed
+ |
+T4    Victim grants relevant permissions / Accessibility access
+ |
+T5    RAT identifies a target banking application
+ |
+T6    Victim is prompted through removal of the genuine bank app
+ |
+T7    Bank-specific replacement is retrieved from the CloudFront host
+ |
+T8    Modified bank APK is installed with a different signer
+ |
+T9    Injected hooks manipulate local security checks
+ |
+T10   RAT attempts credential, screen, SMS, and other collection
+ |
+T11   Operator may attempt fraudulent activity
 ```
 
-These categories map naturally to:
+**This is a reconstructed sequence, not an observed timeline from a specific victim phone.** Individual steps can fail, differ by lure, or be stopped by Android protections and user decisions. The ordering reflects the mechanisms described by ThreatFabric. [1]
 
-| String category | Typical origin |
-|---|---|
-| Apache/Eclipse license links | Bundled open-source license metadata |
-| `schemas.android.com` | Android XML/resource namespace |
-| `developer.android.com` | Android library/documentation references |
-| Crashpad | Crash reporting code |
-| Firebase/Crashlytics | Google/Firebase telemetry and crash reporting |
-| `app-measurement.com` | Google application measurement libraries |
-| LLVM/JetBrains links | Toolchain or Kotlin library metadata |
-| Java-WebSocket wiki | Bundled websocket library reference |
+The critical detection windows are around **T3-T4** (payload installation and permission grants) and **T6-T8** (unusual removal and replacement of a banking app).
 
-Their mere presence inside memory or an APK does **not** make those domains malicious.
+---
 
-A useful analyst rule is:
+## 13. Detection Engineering: Focus on the Sequence, Not One Permission
+
+A standalone alert for `READ_SMS` or an enabled Accessibility service will produce false positives. A better analytic combines multiple behaviors that should not normally occur together:
 
 ```text
-STRING PRESENT
-     ≠
-NETWORK CONNECTION OBSERVED
-     ≠
-MALICIOUS INFRASTRUCTURE
+Unknown / side-loaded application installed
+                 +
+New Accessibility service enabled
+                 +
+Banking application uninstalled
+                 +
+Same banking package reinstalled from outside trusted channel
+                 +
+Signing identity does not match bank-approved certificate
+                 +
+Contact with known Hirudo infrastructure
+                 =
+        HIGH-CONFIDENCE INVESTIGATION CANDIDATE
 ```
 
-For malware triage, indicators should be weighted according to context.
+For organizations with Mobile Threat Defense, managed Android telemetry, or app-integrity measurements, the strongest checks are:
 
-In this dataset:
+- **Package identity and signer comparison:** verify the installed bank app against independently maintained official package and signing-certificate allowlists.
+- **Installation chronology:** correlate uninstall/reinstall events, installer source, and recently granted Accessibility permissions.
+- **Known sample matching:** search for Hirudo package identifiers and hashes where available.
+- **Infrastructure correlation:** hunt the exact CloudFront distribution and documented configuration services, not generic CDN traffic.
+- **Sensitive capability correlation:** look at SMS access, overlay capability, screen-sharing components, boot receivers, and related app activity in the same time window.
+- **Fraud telemetry:** investigate new beneficiaries, abnormal payment velocity, unusual transfers, device re-enrollment, and anomalous authentication recovery.
 
-```text
-Apache / Android / Firebase / Crashpad
-             ↓
-     mostly library residue
+### Safe static APK verification
 
-jiekou.baojingtextile.cn
-             ↓
- documented Hirudo infrastructure
+If defenders have a **forensically acquired local APK**, Android's `apksigner` can print its signing-certificate information without executing the app:
 
-d3q4tlm7pw29zr.cloudfront.net
-             ↓
- documented patched-bank APK host
+```bash
+apksigner verify --verbose --print-certs suspicious.apk
 ```
 
-That distinction materially improves detection quality.
+Compare the reported certificate digest against a **trusted official baseline** for the exact package and legitimate signing-key lineage. A package name, filename, screenshot, or icon is not an adequate baseline by itself.
 
-## Detection and defensive priorities
+Do not install suspected malicious APKs on a personal device to inspect them.
 
-The defensive challenge with Hirudo is that once the genuine banking client has been replaced, **checks performed exclusively inside that client process can no longer be assumed trustworthy**. ThreatFabric reaches the same conclusion from its reverse engineering. citeturn17search0
+### Simplified detection logic
 
-### Highest-value endpoint indicators
-
-For mobile threat hunting, the strongest combination is not simply the presence of one dangerous permission. It is the clustering of several events:
+The following is platform-neutral pseudocode, **not a production-ready SIEM rule**:
 
 ```text
-unknown/lure APK installed
-        +
-Accessibility service enabled
-        +
-notification or screen-sharing capability
-        +
-banking app unexpectedly removed
-        +
-banking app reinstalled outside Play Store
-        +
-certificate/signing identity changes
-        +
-traffic to Hirudo infrastructure
-```
-
-The known Hirudo RAT sample directly exposes Accessibility, SMS, camera, microphone, screen-sharing, APK-installation, persistence, and VPN-related components consistent with this chain. fileciteturn0file0 ThreatFabric independently documents the same functional behavior. citeturn17search0
-
-For EDR, MTD, MDM, or telemetry pipelines, high-value indicators include:
-
-```text
-SHA-256:
-b2270c29b3d0a49a716730d6ef108cffec0b1a4b159dd02e93333fb85e492b99
-
-Package:
-com.r9nkvx.qw2mpl
-
-Related Hirudo package:
-com.zk7qpx.mv9wlt
-```
-
-ThreatFabric identifies these respectively as Hirudo v7.8.166 and an earlier July build. citeturn17search0 The supplied sample report independently provides the detailed metadata for the first package. fileciteturn0file0
-
-Additional ThreatFabric-reported hashes worth hunting are:
-
-```text
-f796eb9ecf516e4f1fafcf89200d9f7d8ddd234f705e63f1bc8fc3ef583f0248
-  com.agbbh.kjdrttt
-  Shopping lure/dropper
-
-0097a0406be20544e98e981075427f40789db40fe4a53b1b4523383a945328b7
-  com.onev.vip
-  1V1 VIP lure/dropper
-
-2e45277acfde3fb704179476b08f428f66a03670bbdbf2e8ec79c0b0333c009b
-  com.koishort.app
-  KoiShort lure/dropper
-
-d51f2bd7ffb49c224d8eaec2c8ca1c8ab9fce2fd5fdceea01eb54296c2f47b4d
-  com.zoyatv.app
-  ZoyaTV lure/dropper
-
-425cd7072b5e9386ac94e97fe272980b6ef36240df6b5d77b371ab7378004c83
-  com.zk7qpx.mv9wlt
-  Hirudo RAT
-
-b2270c29b3d0a49a716730d6ef108cffec0b1a4b159dd02e93333fb85e492b99
-  com.r9nkvx.qw2mpl
-  Hirudo RAT v7.8.166
-```
-
-These are published as Hirudo indicators by ThreatFabric. citeturn17search0
-
-### Certificate monitoring is particularly valuable
-
-Because Android requires application updates to maintain compatible signing identities, a bank app that suddenly has the expected package name but **a different signing certificate** represents a high-value anomaly. Android explicitly requires an application's update certificate to match the installed app's certificate or an authorized rotation chain. citeturn16search0
-
-For managed or security-instrumented devices, a strong rule is conceptually:
-
-```text
-IF
-    package_name == official_bank_package
-AND
-    signing_certificate != approved_bank_certificate
+IF installed_package IN official_banking_package_allowlist
+AND observed_signer NOT IN approved_signers[installed_package]
 THEN
-    severity = CRITICAL
+    alert.severity = CRITICAL
+    alert.reason = "Banking package has an unapproved signing identity"
+
+IF bank_app_uninstalled AND bank_app_reinstalled_within_short_window
+AND (installer_is_untrusted OR new_accessibility_service_enabled)
+THEN
+    alert.severity = HIGH
+    alert.reason = "Suspicious banking application replacement sequence"
 ```
 
-That is more durable than relying only on application label, icon, filename, or version string.
+The certificate mismatch is particularly important because it can survive changes to the malware's domain names, filenames, and visual branding.
 
-### Bank-side Play Integrity enforcement
+---
 
-Google's application-integrity verdict exposes package identity, certificate digest, and version information, and `PLAY_RECOGNIZED` is specifically associated with an app/certificate combination known to Google Play. citeturn19search9
+## 14. IOC Master List: Hirudo and the Patched-Banking Cluster
 
-However, given Hirudo's reported relay/manipulation attempts, the server should bind the integrity result to the actual protected transaction rather than treating it as an independent green flag.
+The following are **historical/research indicators**, not a claim that every endpoint is still active at the time of reading. Network indicators are defanged for safety. Hashes and package names retain their exact form for searching.
 
-A robust logical model is:
+### RAT and lure APK hashes
 
-```text
-Client requests:
-"add beneficiary X / transfer amount Y"
-
-             │
-             ▼
-Generate Integrity request bound to:
-session_id
-user_id
-beneficiary
-amount
-transaction identifier
-fresh timestamp/challenge
-
-             │
-             ▼
-Backend verifies:
-Integrity response
-+ requestHash binding
-+ package identity
-+ certificate digest
-+ version
-+ freshness
-+ behavioral risk
-+ account risk
-```
-
-Google recommends using `requestHash` to bind the protected request data into Standard Play Integrity checks. citeturn17search2
-
-The lesson is broader than Hirudo: **an integrity verdict should be one signal in authorization, not the authorization decision itself**.
-
-### Transaction-level controls remain the final trust boundary
-
-ThreatFabric recommends layered behavioral defenses and server-side risk controls because local security controls can be altered when the banking client itself has been patched. citeturn17search0
-
-The strongest controls are therefore those the modified APK cannot simply return `true` for:
-
-```text
-login risk evaluation
-device re-enrollment checks
-credential-recovery controls
-new-beneficiary risk
-payment velocity
-unusual transfer destination
-behavioral deviation
-step-up authentication
-server-side transaction authorization
-```
-
-A client can lie about:
-
-```text
-"Accessibility is disabled"
-"screen capture is blocked"
-"my signature is correct"
-"integrity passed"
-```
-
-but it cannot independently force a correctly designed bank backend to authorize a payment.
-
-### Practical incident-hunting sequence
-
-For a suspected Android device, the most defensible investigation sequence is to establish **identity and chronology**, rather than immediately opening the suspicious APK.
-
-First determine whether any official banking application underwent an unexpected uninstall/reinstall event. Then compare package IDs and signing certificates to trusted bank-distributed versions. Look for the known Hirudo packages and suspicious Accessibility services, followed by network records involving the dedicated CloudFront distribution or `jiekou[.]baojingtextile[.]cn`. Finally, correlate SMS access, screen-sharing services, overlay privileges, camera/microphone use, and boot persistence around the same timestamp. The known sample's manifest and service inventory provide concrete hunting pivots for those behaviors. fileciteturn0file0
-
-The resulting forensic hypothesis would be:
-
-```text
-T0  lure installed
- │
-T1  fake update shown
- │
-T2  Hirudo RAT installed
- │
-T3  Accessibility / notification access enabled
- │
-T4  target bank app observed
- │
-T5  genuine bank app removed
- │
-T6  bank-specific APK downloaded from d3q4...
- │
-T7  attacker-signed patched bank client installed
- │
-T8  injected hooks activated
- │
-T9  credential / PIN / screen / SMS collection
- │
-T10 fraudulent banking activity
-```
-
-That sequence closely matches the replacement and fraud workflow documented by ThreatFabric. citeturn17search0
-
-## Overall intelligence conclusion
-
-The supplied strings materially improve the public understanding of the Hirudo campaign because they appear to expose the **bank-specific object names behind the CloudFront distribution that ThreatFabric publicly describes only as hosting “eight Indonesian banking apps across seven banks.”** citeturn17search0
-
-The resulting attribution is:
-
-| Bank | Target evidence | Assessment |
+| SHA-256 | Android package | Published role |
 |---|---|---|
-| **Bank Mandiri** | `/livin/latest.apk` + official Livin' branding | **Confirmed with very high confidence** |
-| **Bank Tabungan Negara** | `/btn/latest.apk` | **Confirmed with high confidence** |
-| **Bank Central Asia** | `/mybca/latest.apk` and `/bcamoblie/latest.apk` | **Confirmed with very high confidence; two apps** |
-| **Bank Negara Indonesia** | `/bni/latest.apk` | **Confirmed with high confidence** |
-| **Bank Rakyat Indonesia** | `/bri/latest.apk` | **Confirmed with high confidence** |
-| **Bank Syariah Indonesia** | `/bsi/latest.apk` | **Confirmed with high confidence** |
-| **Bank Jakarta / JakOne ecosystem** | `/jak/latest.apk` + official JakOne branding | **Confirmed with very high confidence** |
+| `f796eb9ecf516e4f1fafcf89200d9f7d8ddd234f705e63f1bc8fc3ef583f0248` | `com.agbbh.kjdrttt` | Shopping lure / dropper |
+| `0097a0406be20544e98e981075427f40789db40fe4a53b1b4523383a945328b7` | `com.onev.vip` | 1V1 X lure / dropper |
+| `2e45277acfde3fb704179476b08f428f66a03670bbdbf2e8ec79c0b0333c009b` | `com.koishort.app` | KoiShort lure / dropper |
+| `d51f2bd7ffb49c224d8eaec2c8ca1c8ab9fce2fd5fdceea01eb54296c2f47b4d` | `com.zoyatv.app` | ZoyaTV lure / dropper |
+| `425cd7072b5e9386ac94e97fe272980b6ef36240df6b5d77b371ab7378004c83` | `com.zk7qpx.mv9wlt` | Hirudo RAT (earlier build) |
+| `b2270c29b3d0a49a716730d6ef108cffec0b1a4b159dd02e93333fb85e492b99` | `com.r9nkvx.qw2mpl` | Hirudo RAT v7.8.166 |
 
-The **eight-app/seven-bank count matches exactly** because BCA is represented twice by myBCA and BCA mobile. Official BCA materials confirm that both applications coexist as BCA digital-banking products. citeturn15search3turn15search12
+These hashes and role attributions are from ThreatFabric's published indicator set and the supplied sample report. [1]
 
-Technically, the campaign represents a significant escalation from ordinary Android overlays. Hirudo first obtains broad control of the victim device through an Accessibility-driven RAT, then selectively removes a genuine banking application and replaces it with a modified copy. The attacker retains much of the real application's functionality while injecting hooks designed to falsify signature checks, conceal Accessibility, defeat screen-capture protection, and interfere with integrity/attestation logic. citeturn17search0
+### Campaign-specific infrastructure
 
-The infrastructure in your memory extraction strongly supports that analysis. The `d3q4tlm7pw29zr[.]cloudfront[.]net` routes correspond to ThreatFabric's documented patched-bank distribution host, while `jiekou[.]baojingtextile[.]cn` independently matches its documented Hirudo configuration API. citeturn17search0 The unrelated Crashpad, Firebase, Android, Apache, Eclipse, Kotlin, LLVM, and WebSocket URLs should be treated as ordinary dependency or framework artifacts rather than campaign IOCs unless runtime evidence demonstrates otherwise.
+| Indicator | Classification |
+|---|---|
+| `d3q4tlm7pw29zr[.]cloudfront[.]net` | Eight-bank-app replacement distribution |
+| `jiekou[.]baojingtextile[.]cn` | RAT configuration API |
+| `134[.]122[.]153[.]136:8085` | HTTP API |
+| `134[.]122[.]153[.]136:18085` | HTTP API |
+| `134[.]122[.]153[.]136:1883` | MQTT service |
+| `134[.]122[.]153[.]136:1884` | MQTT service |
+| `43[.]225[.]157[.]157:8766/request_token` | Integrity relay |
+| `www[.]helloharmonyos[.]com` | Lure configuration |
+| `134[.]122[.]153[.]68:8080` | APK-processing panel |
+| `134[.]122[.]153[.]92:8080` | APK-processing panel |
+| `18[.]139[.]79[.]161` | APK source / management |
+| `d3s06yhcwfnwcx[.]cloudfront[.]net` | 1V1 X distribution |
+| `d21gcldn8gp80l[.]cloudfront[.]net` | KoiShort casino distribution |
+| `dydjjnnjg7jeb[.]cloudfront[.]net` | KoiShort short-drama distribution |
 
-Most importantly, **none of this implies that Mandiri, BTN, BCA, BNI, BRI, BSI, or Bank Jakarta's core banking infrastructure was breached**. The demonstrated attack model compromises the customer's Android environment and abuses repackaged versions of legitimate mobile applications. The security boundary that remains hardest for this malware to forge is therefore the **bank's server-side authorization and fraud-control layer**, particularly when application identity, certificate state, transaction-bound Play Integrity signals, and behavioral risk are evaluated together. citeturn17search0turn17search2turn19search9
+### Path-level targeting pivots
+
+```text
+/livin/latest.apk
+/btn/latest.apk
+/mybca/latest.apk
+/bcamoblie/latest.apk
+/bni/latest.apk
+/bri/latest.apk
+/bsi/latest.apk
+/jak/latest.apk
+```
+
+**Important:** Those strings should be interpreted alongside the specific CloudFront distribution. A generic `/latest.apk` path on an unrelated legitimate domain is not an IOC.
+
+---
+
+## 15. If You Suspect an Android Phone Was Exposed
+
+If a device installed an unfamiliar shopping/video app, accepted an unexpected "update," or suddenly removed and reinstalled a banking app, the safest response is to treat the phone as potentially untrusted until assessed.
+
+**1. Stop sensitive banking activity on that phone.** Use a separately trusted device or the bank's official support channel. Avoid entering credentials, OTPs, or PINs into an app whose provenance is uncertain.
+
+**2. Contact the bank using a known official channel.** Explain the suspected malicious app replacement and ask about account access, transaction review, session/device re-registration, and fraud-protection measures.
+
+**3. Preserve evidence when an investigation is needed.** Record visible app names, installation times, Android security prompts, and suspicious URLs without opening them. In an enterprise environment, let the mobile security or DFIR team collect logs and app artifacts under appropriate procedures.
+
+**4. Review Accessibility and installation permissions.** Look for unfamiliar enabled services and apps allowed to install unknown packages. The absence of an obvious warning is not proof of a clean device.
+
+**5. Recover accounts from a trusted environment.** Revoke sessions and change affected banking, email, or other sensitive credentials as advised by the provider. A device confirmed to be compromised may require a controlled wipe and reinstall from trusted sources, not just deletion of the visible lure app.
+
+**6. Reinstall banking apps only through official distribution channels.** Confirm the legitimate source and bank guidance before restoring access.
+
+If there are unauthorized transactions, preserve supporting evidence and report them promptly through the bank's fraud channel.
+
+---
+
+## 16. What Is Still Unverified
+
+Good threat intelligence is as much about knowing where the evidence ends as knowing what it supports.
+
+For this investigation, these gaps remain:
+
+- **No eight-binary validation:** The actual eight bank-specific APK files were not individually acquired and examined for this article.
+- **No verified Livin' replacement hash:** The supplied research notes document an unsuccessful fetch of the exact `/livin/latest.apk` object. The RAT sample hash is not a substitute.
+- **No bank-specific binary diff:** Claims about the particular injected classes, signatures, and exact package versions for each of the eight replacements require those binaries.
+- **No confirmed affected-customer count:** The existence of operator infrastructure does not tell us how many Indonesian customers were infected.
+- **No proof of bank-backend intrusion:** This campaign targets Android endpoints and app trust, not necessarily the banks' internal networks.
+- **No verified current endpoint availability:** Vendor observations that routes were active into October 2026 should not be read as a real-time availability check on the day someone reads this article.
+- **No confirmed operator identity:** Infrastructure and malware-family attribution do not by themselves establish a real-world person or organization behind the operation.
+
+The next useful research step is not to add more adjectives to the headline. It is to acquire authorized, safely handled samples; calculate independent hashes; verify signer and package metadata; compare code against legitimate builds; and reproduce relevant behavior in an isolated lab.
+
+---
+
+## Closing: The Bank Wasn't Necessarily Hacked. The Banking App May Have Been Replaced.
+
+What stands out about Hirudo is not simply that it steals credentials. Android banking malware has been doing that for years. It is the decision to attack **the application's own trust boundary**.
+
+The operation uses a believable lure to get onto the device, a separate RAT to gain sensitive capabilities, and a bank-specific replacement APK to push past controls implemented inside the legitimate client. The attacker tries to make an altered application report that its signature is correct, that dangerous Accessibility services are not running, and that protected screens remain protected.
+
+The supplied eight-route cluster adds a useful intelligence detail to ThreatFabric's public findings. It gives us a defensible, though still binary-unverified, explanation for **which seven Indonesian banking brands are likely represented by the eight targeted applications**. BCA appears twice. The numbers fit.
+
+None of that should be turned into the false claim that seven banks were breached. A repackaged client on a compromised customer phone and an intrusion into a bank's core infrastructure are fundamentally different incidents.
+
+For defenders, the answer is not to trust a green checkmark that comes from the same client process an attacker can patch. Validate application identity independently. Correlate uninstall/reinstall events. Bind integrity evidence to the protected transaction. Keep behavioral and account-level controls on the server.
+
+> *When the client can be replaced, the client cannot be the final authority on whether it is genuine.*
+
+---
+
+## References and Research Notes
+
+The writing and target reconstruction above are based on the supplied investigation material, with external sources used for corroboration. The underlying sample metadata and string extraction were supplied with the research; they are not represented here as new live captures or as independently retrieved replacement binaries.
+
+1. **ThreatFabric**, [*Hirudo: From Fake Updates to Patched Banking Apps*](https://www.threatfabric.com/blogs/hirudo-from-fake-updates-to-patched-banking-apps), October 14, 2026. Primary reporting on the RAT, eight-app/seven-bank count, hooking engine, distribution, attack chain, and published IOCs.
+2. **Bank Central Asia**, [*Cara Memindahkan Aplikasi myBCA dan BCA mobile di Ponsel Baru*](https://www.bca.co.id/id/informasi/edukatips/2025/04/29/02/43/Cara-memindahkan-aplikasi-myBCA-dan-BCA-mobile-di-ponsel-baru). Official confirmation that myBCA and BCA mobile are distinct applications.
+3. **Bank Tabungan Negara**, [*BTN Resmi Luncurkan Bale by BTN*](https://www.btn.co.id/id/about/gallery/news/news/listing/2025/02/10/btn-resmi-luncurkan-bale-by-btn), February 10, 2025. Documents the BTN Mobile-to-balé transition.
+4. **Bank Negara Indonesia**, [*Pengalihan Layanan BNI Mobile Banking ke wondr by BNI*](https://www.bni.co.id/id-id/beranda/kabar-bni/pengumuman/articleid/24810), June 2, 2025. Documents the migration and app naming.
+5. **Bank Syariah Indonesia**, [*BYOND by BSI Kian Diminati Generasi Muda*](https://www.bankbsi.co.id/news-update/berita/byond-by-bsi-kian-diminati-generasi-muda-bsi-targetkan-10-juta-pengguna-di-2026), March 31, 2026. Confirms BYOND and continued presence of BSI Mobile during the transition.
+6. **Google Android Developers**, [*Play Integrity API overview*](https://developer.android.com/google/play/integrity/overview). Official description of app/device integrity signals and response interpretation.
+7. **Google Android Developers**, [*Make a standard API request*](https://developer.android.com/google/play/integrity/standard). Official guidance for `requestHash` and binding integrity results to requests.
+8. **BleepingComputer**, [*Hirudo Android malware replaces banking apps to evade security checks*](https://www.bleepingcomputer.com/news/security/hirudo-android-malware-replaces-banking-apps-to-evade-security-checks/), October 14, 2026. Independent news coverage of the ThreatFabric disclosure.
+
+**Research methodology:** Supplied string and APK-metadata review; comparison against ThreatFabric's published infrastructure and reported reverse engineering; official banking-product cross-references; careful separation of direct observations, vendor findings, and analytical inference.
+
+**Disclosure reminder:** Indicators are provided for defensive threat hunting, incident response, and research. Brand names identify likely *impersonation targets*, not confirmed breaches of the organizations mentioned.
